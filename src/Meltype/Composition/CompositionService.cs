@@ -40,6 +40,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         Languages = options.Languages ?? new LanguageMemory(Config.AppPaths.LanguageMemoryFile);
         detector.Memory = Languages;
         UserDictionary = options.UserDictionary ?? new UserDictionary(Config.AppPaths.UserDictionaryFile);
+        UserEnglish = options.UserEnglish ?? UserEnglishWords.Load(Config.AppPaths.UserDictionaryDirectory);
         _detector = detector;
         var resolved = new CompositionOptions
         {
@@ -106,6 +107,12 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
     public UserDictionary UserDictionary { get; }
+
+    /// <summary>英語のユーザー辞書 (打ったとおりの英字で入力する語。トレイの「ユーザー辞書...」の「英語」で編集する)。</summary>
+    public UserEnglishWords UserEnglish { get; }
+
+    /// <summary>英語のユーザー辞書を変えたら呼ぶ。判定にすぐ効かせる (変換ボックスと Meltype IME の両方)。</summary>
+    public void ReloadUserWords() => _detector.ReloadUserWords();
 
     private readonly CompositionDetector _detector;
 

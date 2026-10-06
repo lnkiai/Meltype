@@ -15,19 +15,24 @@ public sealed class ProperNouns
     public static ProperNouns Load(string? userDirectory)
     {
         var nouns = new ProperNouns();
-        nouns.AddText(DictionarySource.ReadEmbedded("propernouns.txt"));
+        // ユーザーの辞書を先に読む (同じ語なら、ユーザーが登録した大文字小文字の形を使う: Github と登録すれば Github)。
+        // 英語のユーザー辞書 (Composition.UserEnglishWords) の語も、登録した形で出すので固有名詞として読む
         if (userDirectory is not null)
         {
-            var path = Path.Combine(userDirectory, "propernouns.txt");
-            try
+            foreach (var name in new[] { Composition.UserEnglishWords.FileName, "propernouns.txt" })
             {
-                if (File.Exists(path)) nouns.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの固有名詞辞書を読めませんでした: {ex.Message}");
+                var path = Path.Combine(userDirectory, name);
+                try
+                {
+                    if (File.Exists(path)) nouns.AddText(File.ReadAllText(path));
+                }
+                catch (Exception ex)
+                {
+                    Diagnostics.Log.Warn($"ユーザーの固有名詞辞書を読めませんでした: {ex.Message}");
+                }
             }
         }
+        nouns.AddText(DictionarySource.ReadEmbedded("propernouns.txt"));
         return nouns;
     }
 

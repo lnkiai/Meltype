@@ -18,9 +18,9 @@ public sealed class CompositionDetector
 {
     private readonly RomajiDetector _romaji;
     private readonly DictionaryDetector _japanese;
-    private readonly EnglishDetector _english;
+    private EnglishDetector _english;
     private readonly TypoDetector _typo;
-    private readonly ProperNouns _proper;
+    private ProperNouns _proper;
     private readonly KanaDetector? _kana;
 
     private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "net", "org", "uk", "us", "xyz"];
@@ -43,7 +43,11 @@ public sealed class CompositionDetector
         var japanese = new DictionaryDetector(japaneseWords, romaji);
         var proper = ProperNouns.Load(userDictionaryDirectory);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(proper.LowercaseWords));
-        return new CompositionDetector(romaji, japanese, english, new TypoDetector(japanese.Words), proper, new KanaDetector(japaneseWords, romaji));
+        return new CompositionDetector(romaji, japanese, english, new TypoDetector(japanese.Words), proper, new KanaDetector(japaneseWords, romaji))
+        {
+            UserDictionaryDirectory = userDictionaryDirectory,
+            _userEnglish = UserEnglishWords.Load(userDictionaryDirectory).LowercaseWords,
+        };
     }
 
     private static readonly Lazy<WordList> ReadableEnglish = new(() =>
@@ -52,6 +56,35 @@ public sealed class CompositionDetector
         foreach (var word in DictionarySource.Load("english-readable.txt", null)) list.Add(word);
         return list;
     });
+
+    /// <summary>ユーザーの辞書 (dictionaries\*.txt) の場所。null なら組み込みの辞書だけ。</summary>
+    public string? UserDictionaryDirectory { get; private init; }
+
+    // ユーザーが登録した英語の語 (小文字)。自動の判定・覚えた語より優先して英語にする
+    private IReadOnlySet<string> _userEnglish = new HashSet<string>();
+
+    /// <summary>英語のユーザー辞書が変わるたびに増える (判定の結果を使い回してよいかを見るのに使う)。</summary>
+    public int UserWordsVersion { get; private set; }
+
+    /// <summary>
+    /// 英語のユーザー辞書を登録・削除したあとに呼ぶ。固有名詞と英単語の辞書を読み直す (UI スレッドから。差し替えるだけなので判定中でも壊れない)。
+    /// </summary>
+    public void ReloadUserWords()
+    {
+        var directory = UserDictionaryDirectory;
+        var proper = ProperNouns.Load(directory);
+        var english = new EnglishDetector(DictionarySource.Load("english.txt", directory).Concat(proper.LowercaseWords));
+        _userEnglish = UserEnglishWords.Load(directory).LowercaseWords;
+        _proper = proper;
+        _english = english;
+        UserWordsVersion++;
+    }
+
+    /// <summary>ユーザーが英語として登録した語か (小文字で引く)。</summary>
+    public bool IsUserEnglish(string lower) => _userEnglish.Contains(lower);
+
+    /// <summary>英語か日本語かが決まっている語か (ユーザーが英語として登録した語 → 直して覚えた語)。決まっていなければ null。</summary>
+    private bool? Learned(string lower) => _userEnglish.Contains(lower) ? true : Memory?.Get(lower);
 
     public RomajiDetector Romaji => _romaji;
 
@@ -85,7 +118,7 @@ public sealed class CompositionDetector
         // ただし先頭が辞書の英単語として区切れている (github に push) ならその区切りを使う。
         var whole = Raw(units, 0, units.Count) + pending;
         if (UnknownWordThenJapanese(units, pending, segments, level, whole) is { } split) return split;
-        if (level != DetectionLevel.Manual && !segments[0].IsEnglish && Memory?.Get(whole.ToLowerInvariant()) != false && IsUnknownEnglishWord(whole))
+        if (level != DetectionLevel.Manual && !segments[0].IsEnglish && Learned(whole.ToLowerInvariant()) != false && IsUnknownEnglishWord(whole))
         {
             return [new CompositionSegment(true, "", whole)];
         }
@@ -278,7 +311,7 @@ public sealed class CompositionDetector
 
     /// <summary>同梱の英単語の辞書・固有名詞にある語か、ユーザーが英字に直して覚えた語か (ok、github)。スペルチェッカーは使わない。</summary>
     public bool IsListedEnglishWord(string lower) =>
-        lower.Length >= 2 && (Memory?.Get(lower) ?? (_english.Words.ContainsWord(lower) || _proper.Contains(lower)));
+        lower.Length >= 2 && (Learned(lower) ?? (_english.Words.ContainsWord(lower) || _proper.Contains(lower)));
 
     /// <summary>
     /// 知っている英単語か (同梱の辞書・固有名詞・ユーザーが英字に直して覚えた語・4 文字以上ならスペルチェッカー)。
@@ -288,7 +321,7 @@ public sealed class CompositionDetector
     {
         var lower = word.ToLowerInvariant();
         if (lower.Length < 3 || !lower.All(char.IsAsciiLetterLower)) return false;
-        if (Memory?.Get(lower) is { } learned) return learned;
+        if (Learned(lower) is { } learned) return learned;
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || (lower.Length >= 4 && IsSpellWord(lower));
     }
 
@@ -357,7 +390,7 @@ public sealed class CompositionDetector
         if (level == DetectionLevel.Manual) return false;
         // ユーザーが英字 / かなに直して覚えた語。ただし短くてローマ字として読める語 (go、no) は、日本語のすぐ後ろ
         // (nihon|go) では使わない (一度 go を英字で確定しただけで、日本語 が にほんgo になっていた)。
-        if (Memory?.Get(lower) is { } learned && !(learned && before < 0 && lower.Length <= 3 && _romaji.AnalyzeFragment(lower) is { IsValid: true, Partial: "" })) return learned;
+        if (Learned(lower) is { } learned && !(learned && before < 0 && lower.Length <= 3 && _romaji.AnalyzeFragment(lower) is { IsValid: true, Partial: "" })) return learned;
         // 5 文字以上の英単語で、ローマ字としても読めるもの:
         // - c 行の綴り (camera、coffee、class) は英語。日本語を打つときは k を使う (カメラ は kamera)。
         // - ローマ字として読むと ぢ・づ になる綴り (radio = らぢお、studio、audio) で、ふつうの日本語の語にならないなら英語。
@@ -481,7 +514,7 @@ public sealed class CompositionDetector
         // Shift を押して打った大文字で始まる語は英語 (手動でも)。
         if (char.IsAsciiLetterUpper(span[0]) && (word || prefix || atEnd)) return true;
         if (level == DetectionLevel.Manual) return false;
-        if (Memory?.Get(lower) is { } learned) return learned;
+        if (Learned(lower) is { } learned) return learned;
         if (!(word || prefix) || lower.Length < 2) return false;
 
         var japanese = _kana?.IsJapaneseWordOrPrefix(kana) == true;
@@ -642,7 +675,7 @@ public sealed class CompositionDetector
     /// </summary>
     private bool EndsWithParticleAfterUnknownWord(string lower)
     {
-        if (_english.Words.ContainsWord(lower) || _proper.Contains(lower) || Memory?.Get(lower) == true || IsSpellWord(lower)) return false;
+        if (_english.Words.ContainsWord(lower) || _proper.Contains(lower) || Learned(lower) == true || IsSpellWord(lower)) return false;
         foreach (var particle in TrailingParticles)
         {
             if (!lower.EndsWith(particle, StringComparison.Ordinal)) continue;
@@ -656,7 +689,7 @@ public sealed class CompositionDetector
     private bool IsKnownCapitalizedWord(string word)
     {
         var lower = word.ToLowerInvariant();
-        return Memory?.Get(lower) == true || _english.Words.ContainsWord(lower) || _proper.Contains(lower);
+        return Learned(lower) == true || _english.Words.ContainsWord(lower) || _proper.Contains(lower);
     }
 
     /// <summary>最初の 3 文字以内でローマ字として読めなくなる、4 文字以上の語 (日本語の打ち間違いでもないもの)。</summary>

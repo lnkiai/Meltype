@@ -119,6 +119,9 @@ public sealed record CompositionOptions
     /// <summary>ユーザー辞書 (変換で最優先に使う)。</summary>
     public UserDictionary? UserDictionary { get; init; }
 
+    /// <summary>英語のユーザー辞書 (Windows の CompositionService が画面から編集するのに使う。null なら既定の場所)。</summary>
+    public UserEnglishWords? UserEnglish { get; init; }
+
     /// <summary>英語か日本語かの自動判定の強さ。</summary>
     public Func<DetectionLevel> Level { get; init; } = () => DetectionLevel.Balanced;
 
@@ -1164,12 +1167,18 @@ public sealed class CompositionController
         return candidates;
     }
 
-    /// <summary>英語の文節の候補: 打ったまま → 固有名詞の正しい形 (GitHub) → 先頭だけ大文字 → すべて大文字 → 全角。</summary>
+    /// <summary>
+    /// 英語の文節の候補: 打ったまま → 固有名詞の正しい形 (GitHub) → 先頭だけ大文字 → すべて大文字 → 全角。
+    /// ユーザーが英語のユーザー辞書に登録した語は、登録した形 (Hono) を先頭にする。
+    /// </summary>
     private List<string> EnglishCandidates(string raw)
     {
         var lower = raw.ToLowerInvariant();
         var capitalized = raw.Length > 0 ? char.ToUpperInvariant(raw[0]) + raw[1..] : raw;
-        return Distinct(raw, _detector.ProperNouns.Canonical(lower), capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
+        var canonical = _detector.ProperNouns.Canonical(lower);
+        return canonical is not null && _detector.IsUserEnglish(lower)
+            ? Distinct(canonical, raw, capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw))
+            : Distinct(raw, canonical, capitalized, raw.ToUpperInvariant(), CompositionText.ToFullWidth(raw));
     }
 
     /// <summary>選んでいる候補の意味: 日本語の意味 (ウィクショナリー)、無ければ英訳 (JMdict)。</summary>

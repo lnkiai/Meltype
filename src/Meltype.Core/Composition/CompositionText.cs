@@ -449,7 +449,7 @@ public sealed class CompositionText
             .Append(PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-').Append(final ? 'F' : '-')
-            .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
+            .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1).Append(':').Append(_detector.UserWordsVersion);
         return key.ToString();
     }
 

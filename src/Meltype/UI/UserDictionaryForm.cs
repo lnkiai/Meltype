@@ -7,9 +7,10 @@ using Meltype.Input;
 namespace Meltype.UI;
 
 /// <summary>
-/// ユーザー辞書の登録・削除。読みはローマ字で打ってもよい (kigoutou → きごうとう)。
-/// 読みを打つと変換候補がプルダウンに出るので、そこから選ぶか、単語欄に直接打って登録する
-/// (この画面では Meltype キーボードが使える)。
+/// ユーザー辞書の登録・削除。
+/// 「日本語」: 読みと単語。読みはローマ字で打ってもよい (kigoutou → きごうとう)。読みを打つと変換候補がプルダウンに出るので、
+/// そこから選ぶか、単語欄に直接打って登録する (変換ボックスの方式なら、この画面でも Meltype キーボードが使える。Meltype IME は Meltype 自身の画面では何もしないので、読みはローマ字で打つ)。
+/// 「英語」: 打ったとおりの英字で入力する語 (自分の ID・社名など。deno が「での」にならないように)。
 /// </summary>
 internal sealed class UserDictionaryForm : Form
 {
@@ -29,6 +30,13 @@ internal sealed class UserDictionaryForm : Form
         BackgroundColor = SystemColors.Window,
     };
     private readonly Label _message = new() { AutoSize = true, ForeColor = Color.Firebrick, Padding = new Padding(0, 6, 0, 0) };
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly TabPage _japaneseTab = new("日本語 (読み → 単語)");
+    private readonly TabPage _englishTab = new("英語 (そのまま英字)");
+    private readonly TextBox _english = new() { Width = 220 };
+    private readonly Label _englishMessage = new() { AutoSize = true, ForeColor = Color.Firebrick, Padding = new Padding(0, 6, 0, 0) };
+    private readonly Button _addEnglish = new() { Text = "登録", AutoSize = true };
+    private readonly ListBox _englishList = new() { Dock = DockStyle.Fill, IntegralHeight = false, SelectionMode = SelectionMode.MultiExtended };
     private readonly System.Windows.Forms.Timer _suggestTimer = new() { Interval = 300 };
 
     public UserDictionaryForm(CompositionService service)
@@ -68,9 +76,49 @@ internal sealed class UserDictionaryForm : Form
         _grid.Columns.Add("word", "単語");
         var gridPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 8, 0) };
         gridPanel.Controls.Add(_grid);
+        _japaneseTab.Controls.Add(gridPanel);
+        _japaneseTab.Controls.Add(entry);
 
-        Controls.Add(gridPanel);
-        Controls.Add(entry);
+        // 英語: 打ったとおりの英字で入力する語
+        _addEnglish.Click += (_, _) => RegisterEnglish();
+        var englishEntry = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(8) };
+        englishEntry.Controls.Add(new Label { Text = "英語の語 (英字)", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 0);
+        englishEntry.Controls.Add(_english, 1, 0);
+        englishEntry.Controls.Add(_addEnglish, 2, 0);
+        englishEntry.Controls.Add(_englishMessage, 1, 1);
+        englishEntry.SetColumnSpan(_englishMessage, 2);
+        var englishHelp = new Label
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            MaximumSize = new Size(520, 0),
+            ForeColor = SystemColors.GrayText,
+            Padding = new Padding(10, 0, 10, 6),
+            Text = "自分の ID・社名・製品名など、ローマ字として読めてもかなにしたくない語を登録します (deno → 「での」にならない)。" +
+                   "大文字小文字は登録したとおりの形で候補に出ます (Hono)。",
+        };
+        var englishPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 8, 0) };
+        englishPanel.Controls.Add(_englishList);
+        _englishTab.Controls.Add(englishPanel);
+        _englishTab.Controls.Add(englishHelp);
+        _englishTab.Controls.Add(englishEntry);
+        _englishList.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Delete) RemoveSelected();
+        };
+
+        _tabs.TabPages.AddRange([_japaneseTab, _englishTab]);
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            // 取り込み・書き出しは日本語の辞書だけ (Microsoft IME などの形式)
+            var japanese = _tabs.SelectedTab == _japaneseTab;
+            import.Visible = japanese;
+            export.Visible = japanese;
+            AcceptButton = japanese ? add : _addEnglish;
+            (japanese ? (Control)_reading : _english).Focus();
+        };
+
+        Controls.Add(_tabs);
         Controls.Add(buttons);
         AcceptButton = add;
         CancelButton = close;
@@ -121,6 +169,7 @@ internal sealed class UserDictionaryForm : Form
         var error = _service.UserDictionary.Add(reading, _word.Text);
         if (error is not null)
         {
+            _message.ForeColor = Color.Firebrick;
             _message.Text = error;
             return;
         }
@@ -133,9 +182,42 @@ internal sealed class UserDictionaryForm : Form
         _reading.Focus();
     }
 
-    /// <summary>選んでいた語を入れて開く (Ctrl+F7)。読みは推測したもの (直して登録できる)。</summary>
+    private void RegisterEnglish()
+    {
+        var word = _english.Text.Trim();
+        var error = _service.UserEnglish.Add(word);
+        if (error is not null)
+        {
+            _englishMessage.ForeColor = Color.Firebrick;
+            _englishMessage.Text = error;
+            return;
+        }
+        _service.ReloadUserWords();
+        _englishMessage.Text = "";
+        Diagnostics.Log.Info($"英語のユーザー辞書に登録しました: {Diagnostics.Log.Text(word)}");
+        _english.Clear();
+        Reload();
+        _english.Focus();
+    }
+
+    /// <summary>選んでいた語を入れて開く (Ctrl+F7)。読みは推測したもの (直して登録できる)。英字だけの語なら「英語」で開く。</summary>
     public void Prefill(string word, string reading)
     {
+        if (word.Length >= UserEnglishWords.MinLength && word.All(char.IsAsciiLetter))
+        {
+            // 英字だけの語は「英語」のタブで開く。読みを付けて登録したいとき (えーぴーあい → API) のために、日本語のタブにも入れておく
+            _word.Text = word;
+            _reading.Text = reading;
+            _message.Text = "";
+            _tabs.SelectedTab = _englishTab;
+            _english.Text = word;
+            _englishMessage.Text = "「登録」を押すと、この語は打ったとおりの英字で入力されます。読みを付けて登録するなら「日本語」のタブへ。";
+            _englishMessage.ForeColor = SystemColors.GrayText;
+            Activate();
+            _english.Focus();
+            return;
+        }
+        _tabs.SelectedTab = _japaneseTab;
         _word.Text = word;
         _reading.Text = reading;
         _message.Text = reading.Length == 0 ? "読みを入力してください。" : "読みを確かめて「登録」を押してください。";
@@ -193,6 +275,15 @@ internal sealed class UserDictionaryForm : Form
 
     private void RemoveSelected()
     {
+        if (_tabs.SelectedTab == _englishTab)
+        {
+            var words = _englishList.SelectedItems.Cast<string>().ToList();
+            if (words.Count == 0) return;
+            foreach (var word in words) _service.UserEnglish.Remove(word);
+            _service.ReloadUserWords();
+            Reload();
+            return;
+        }
         foreach (DataGridViewRow row in _grid.SelectedRows)
         {
             if (row.Tag is UserWord word) _service.UserDictionary.Remove(word);
@@ -208,6 +299,11 @@ internal sealed class UserDictionaryForm : Form
             var index = _grid.Rows.Add(word.Reading, word.Word);
             _grid.Rows[index].Tag = word;
         }
+        _englishList.Items.Clear();
+        // 手で書き換えたファイルも、一覧に出して判定にも効かせる
+        _service.UserEnglish.Refresh();
+        _service.ReloadUserWords();
+        foreach (var word in _service.UserEnglish.Words.Reverse()) _englishList.Items.Add(word);
     }
 
     protected override void Dispose(bool disposing)

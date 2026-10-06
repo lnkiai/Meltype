@@ -81,6 +81,7 @@ internal static class TipHarness
         new(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
         {
             UserDictionary = new Composition.UserDictionary(null),
+            UserEnglish = new Composition.UserEnglishWords(null),
             History = new Composition.ConversionHistory(null),
             Languages = new Composition.LanguageMemory(null),
             TranslationHistory = new Composition.TranslationHistory(null),

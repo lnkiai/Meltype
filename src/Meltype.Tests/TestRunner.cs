@@ -141,7 +141,7 @@ internal static class TestRunner
             var engine = new MeltypeEngine(new Config.Settings(), null, null, null);
             using var invoker = new Control();
             invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions { UserDictionary = new Composition.UserDictionary(null) });
+            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions { UserDictionary = new Composition.UserDictionary(null), UserEnglish = new Composition.UserEnglishWords(null) });
             service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。
@@ -160,6 +160,19 @@ internal static class TestRunner
                     form.DrawToBitmap(bitmap, new Rectangle(0, 0, form.Width, form.Height));
                     bitmap.Save(Path.Combine(args[1], form.GetType().Name + ".png"));
                     // 設定画面は、アプリ別設定の表のあたりまでスクロールした画像も作る。
+                    // ユーザー辞書は「英語」のタブの画像も作る
+                    if (form is UI.UserDictionaryForm dictionaryForm)
+                    {
+                        service.UserEnglish.Add("deno");
+                        service.UserEnglish.Add("Hono");
+                        dictionaryForm.Prefill("GitHub", "");
+                        Application.DoEvents();
+                        using var english = new Bitmap(form.Width, form.Height);
+                        form.DrawToBitmap(english, new Rectangle(0, 0, form.Width, form.Height));
+                        english.Save(Path.Combine(args[1], "UserDictionaryForm-english.png"));
+                        service.UserEnglish.Remove("deno");
+                        service.UserEnglish.Remove("Hono");
+                    }
                     if (form is UI.SettingsForm && FindControl(form, c => c is Button { Text: "実行中のアプリから追加…" }) is { } button &&
                         FindControl(form, c => c is ScrollableControl { AutoScroll: true } s && s.Contains(button)) is ScrollableControl scroller)
                     {
