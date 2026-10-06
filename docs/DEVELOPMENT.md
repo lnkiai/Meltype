@@ -28,7 +28,7 @@ Meltype IME (入力欄に直接入力) も入れるときは、Visual Studio Bui
 powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 ```
 
-`dist\Meltype-test-<日付>.zip` ができます。中身はビルド済みの `app` フォルダー、`Install.cmd` / `Uninstall.cmd` (ダブルクリックで実行)、協力者向けの `README.txt` です。
+`dist\Meltype-test-<日付>.zip` ができます。続けて `packaging\setup\Build-Setup.ps1` を実行すると、その zip を中に持つインストーラー `dist\Meltype-IME-<版>-setup.exe` (ダブルクリックで Install.cmd と同じことをする) ができます。中身はビルド済みの `app` フォルダー、`Install.cmd` / `Uninstall.cmd` (ダブルクリックで実行)、協力者向けの `README.txt` です。
 .NET ランタイムを同梱しているので、協力者の PC に .NET は不要です。この環境は NuGet が使えないため、自己完結ビルドの代わりに、この PC にインストール済みの .NET ランタイムを `app\dotnet` にコピーし、`Meltype.exe` がそこを使うようにしています (`AppHostDotNetSearch=AppRelative`)。
 
 スマホからも受け取れる大きさ (30MB 未満、現在約 24MB) にするため、ランタイムから Meltype が使わない部品を削っています。
