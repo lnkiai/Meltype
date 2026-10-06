@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using System.Runtime.InteropServices;
 using Meltype.Input;

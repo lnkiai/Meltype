@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using System.Reflection;
 
@@ -21,8 +22,12 @@ internal static class AppInfo
     /// <summary>不具合報告を開く URL (OS・版・実行環境は今のものを入れる)。</summary>
     public static string ReportUrl(string environment) => Config.ProjectInfo.ReportUrl(Diagnostics.ReportInfo.OsName, Version, environment);
 
-    /// <summary>自動更新で最新のリリースを見に行く GitHub のリポジトリ (公開されている必要がある)。</summary>
-    public const string UpdateRepository = "yksr-melt/Meltype";
+    /// <summary>
+    /// 自動更新で最新のリリースを見に行く GitHub のリポジトリ (公開されている必要がある)。
+    /// このフォーク (Meltype IME を足したもの) は自動更新をしないので空 (新しい版は Releases の zip かソースから手で入れ直す)。
+    /// </summary>
+    public const string UpdateRepository = "";
+    // GPL v3 以外の条件での利用の相談先 (本家の作者。本家のコードについて決められるのは本家の作者だけ)
     public const string Contact = "ibutya0319@gmail.com";
 
     public static string Version =>
@@ -37,7 +42,8 @@ internal static class AppInfo
         このプログラムは無保証です。詳しくは GNU GPL を参照してください。
         https://www.gnu.org/licenses/gpl-3.0.html
 
-        ソースコード: {SourceUrl}
+        ソースコード: {SourceUrl} (Meltype IME を足したフォーク。本家: {Config.ProjectInfo.UpstreamUrl})
+        Meltype IME の部分 (native\tip など) は lnkiai の著作物で、GNU GPL v3 (またはそれ以降) でだけ提供しています。
         GPL v3 の条件で使えない (非公開で利用したい) 場合は、メールでご相談ください: {Contact}
 
         同梱の .NET ランタイムは MIT ライセンスです (app\dotnet\LICENSE.txt)。

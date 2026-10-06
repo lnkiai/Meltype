@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using System.Diagnostics;
 using Meltype.Diagnostics;
@@ -40,7 +41,8 @@ internal sealed class Updater : IDisposable
     {
         try
         {
-            if (!File.Exists(ReadyFile)) return null;
+            // 自動更新をしない版では、前にダウンロードしてあった版も入れない
+            if (NoUpdates || !File.Exists(ReadyFile)) return null;
             var parts = File.ReadAllText(ReadyFile).Trim().Split('\t');
             if (parts.Length != 2 || !IsNewer(parts[0]) || !File.Exists(Path.Combine(parts[1], "install.ps1"))) return null;
             return (parts[0], parts[1]);
@@ -58,6 +60,7 @@ internal sealed class Updater : IDisposable
     /// </summary>
     public static bool ApplyStagedAtStartup(Func<bool> enabled)
     {
+        if (NoUpdates) return false;
         try
         {
             if (File.Exists(ApplyingFile))
@@ -105,16 +108,25 @@ internal sealed class Updater : IDisposable
     }
 
     /// <summary>今すぐ確認する (トレイの「更新を確認」)。結果は Ready か戻り値の文言で返す。</summary>
-    public Task<string> CheckNowAsync() => AppInfo.IsPublicRelease
-        ? Task.Run(() => Run() ?? "更新を確認できませんでした。")
+    public Task<string> CheckNowAsync() => NoUpdates ? Task.FromResult(NoUpdatesMessage)
+        : AppInfo.IsPublicRelease ? Task.Run(() => Run() ?? "更新を確認できませんでした。")
         : Task.FromResult($"Meltype {AppInfo.Version} はテスト版です。自動更新は公開版 (1.0.0) から使えます。新しいテスト版は配布元から受け取ってください。");
 
     private void Check()
     {
         // 公開 (1.0.0) まではリポジトリが非公開で、確認しても見つからない (ログに 404 が残るだけ) ので確認しない
-        if (!_enabled() || !AppInfo.IsPublicRelease) return;
+        if (!_enabled() || !AppInfo.IsPublicRelease || NoUpdates) return;
         Run();
     }
+
+    /// <summary>
+    /// 自動更新をしない版か (更新を見に行くリポジトリが無い)。このフォークは自動では更新しない (新しい版は Releases から手で入れる)。
+    /// 本家のリリースには Meltype IME が入っておらず、動作モード「Meltype IME」も読めないので、本家の版にもしない。
+    /// </summary>
+    private static bool NoUpdates => AppInfo.UpdateRepository.Length == 0;
+
+    private const string NoUpdatesMessage =
+        "この Meltype (Meltype IME を足したフォーク) は自動では更新しません。https://github.com/lnkiai/Meltype/releases の新しい zip か、ソースから入れ直してください。";
 
     /// <summary>update.ps1 を実行する。戻り値は利用者に見せる結果。</summary>
     private string? Run()

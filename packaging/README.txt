@@ -4,7 +4,7 @@
 雪解けのように、半角/全角の壁を溶かす日本語入力。
 
 半角/全角 キーを押さなくても、日本語と英語を打ち分けられるようにする Windows 用のツールです。
-詳しい使い方: https://github.com/yksr-melt/Meltype/blob/main/docs/USAGE.md
+詳しい使い方: https://github.com/lnkiai/Meltype/blob/main/docs/USAGE.md
 
 ※ 以前「AutoIME」という名前のテスト版を使っていた方: Install.cmd を実行すると古い AutoIME は自動で片付けられ、
    設定と学習データは引き継がれます。
@@ -90,7 +90,7 @@ Meltype が有効な間は、Windows の IME (Microsoft IME・Google 日本語�
 
 ■ 保存されるデータ
 設定と学習データは %LOCALAPPDATA%\Meltype に保存されます。打った内容をネットワークに送ることはありません。
-通信するのは、新しい版があるかを GitHub に確かめるときだけです (アイコンを右クリック →「更新」→「自動で更新する」で止められます)。
+このフォーク (Meltype IME を足したもの) は自動更新をしないので、新しい版の確認はしません (通信するのは、自分で開いた不具合報告のページだけです)。
 
 ■ アンインストール
 タスクトレイの Meltype のアイコンを右クリック →「アンインストール...」を選びます。
@@ -100,5 +100,5 @@ Windows の「設定」→「アプリ」→「インストールされている
 
 ■ ライセンス
 Meltype は GNU GPL v3 (LICENSE.txt) で配布しています。無保証です。
-ソースコード: https://github.com/yksr-melt/Meltype
+ソースコード: https://github.com/lnkiai/Meltype (Meltype IME を足したフォーク。本家: https://github.com/yksr-melt/Meltype)
 同梱の .NET ランタイム (app\dotnet) は MIT ライセンスです。

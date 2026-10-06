@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: セキュリティの問題 (公開しないで報告)
-    url: https://github.com/yksr-melt/Meltype/security/advisories/new
+    url: https://github.com/lnkiai/Meltype/security/advisories/new
     about: キー入力を扱うソフトなので、悪用できそうな問題は Issue ではなくこちらから非公開で報告してください。
   - name: 非公開で利用したい (GPL の条件で使えない) 場合
     url: https://github.com/yksr-melt/Meltype#ライセンス

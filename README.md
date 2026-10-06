@@ -2,6 +2,10 @@
 
 **雪解けのように、半角/全角の壁を溶かす日本語入力。**
 
+> このリポジトリは [Meltype](https://github.com/yksr-melt/Meltype) のフォークです。Windows で、打った文字を入力欄に直接 (下線付きで) 入れる Meltype IME (TSF) を足しています ([設計](docs/TSF_DESIGN.md)・[使い方](docs/USAGE.md#meltype-ime))。
+> Meltype IME は本家のリリースの zip には入っていないので、このリポジトリの [Releases](https://github.com/lnkiai/Meltype/releases) の zip か、ソースから `Install-Meltype.ps1` で入れてください (下の「インストール」)。不具合・脆弱性の報告は、このリポジトリへお願いします。
+> 2026 年に lnkiai が変更しています (本家のファイルを変えたところも含みます)。
+
 半角/全角 キーを押さなくても、日本語と英語を打ち分けられるようにする Windows 常駐ツールです。
 (開発中は AutoIME という仮の名前でした。以前の設定と学習データは、Meltype の初回起動時に自動で引き継ぎます)
 
@@ -18,16 +22,34 @@ Windows 版のほか、Mac 版・Linux 版のプレビュー版があります (
 
 ## インストール
 
+このフォーク (Meltype IME を使う) は、[Releases](https://github.com/lnkiai/Meltype/releases) の `Meltype-IME-<版>-setup.exe` をダブルクリックすると入ります
+(`Meltype-IME-<版>-windows.zip` を展開して `Install.cmd` をダブルクリックしても同じです)。
+途中で「Meltype IME を Windows に登録します」と出て管理者権限の確認が出るので、「はい」を選んでください。入ったら **Win + Space** で「Meltype」を選びます。
+コード署名をしていないので、「Windows によって PC が保護されました」と出たら「詳細情報」→「実行」で入れられます。アンインストールは下の「本家のリリースで入れた場合」と同じです。
+
+ソースから入れるときは、.NET 10 SDK と、Meltype IME をビルドする Visual Studio Build Tools の「C++ によるデスクトップ開発」が要ります。
+
+```powershell
+git clone https://github.com/lnkiai/Meltype
+cd Meltype
+powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1              # ビルドして入れる (Meltype IME の登録で管理者権限の確認が出ます)
+powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # アンインストール (Meltype IME の登録も外し、設定と学習データも消す)
+```
+
+Meltype IME を入れずに使うときは `Install-Meltype.ps1 -NoIme` (管理者権限は要りません)。ビルドしたものはソースのフォルダーの `app-build` に置かれ、アンインストールしても残ります (要らなければ消してください)。
+
+以下は本家のリリース (Meltype IME は入っていません) の入れ方です。
+
 1. [Releases](https://github.com/yksr-melt/Meltype/releases) から `Meltype-<version>-windows.zip` をダウンロードして展開する
    (Mac 版は `Meltype-<version>-mac.zip`、Linux 版は `Meltype-<version>-linux.zip`。どちらもプレビュー版)
-2. `Install.cmd` をダブルクリックする (管理者権限は不要。入力欄に直接入力する Meltype IME を入れるときだけ、管理者権限の確認が出ます。断っても、変換ボックスで入力する方式で使えます)
+2. `Install.cmd` をダブルクリックする (管理者権限は不要)
    - Meltype はコード署名をしていないので、「Windows によって PC が保護されました」と出ることがあります。「詳細情報」→「実行」で入れられます。
    - キーボードの入力を受け持つソフトなので、ウイルス対策ソフトが誤って止めることがあります。そのときは、お使いのウイルス対策ソフトで Meltype のフォルダーを許可してください。
    - ダウンロードした zip が本物か確かめたいときは、リリースのページに出ている SHA-256 と比べてください (PowerShell: `Get-FileHash .\Meltype-<version>-windows.zip`)。
 3. タスクトレイに「あ」のアイコンが出れば動いています。Windows の起動時にも自動で起動します。
 
-1.0.0 以降は、新しい版が出ると自動で更新します (トレイのアイコンを右クリック →「更新」→「自動で更新する」で止められます)。
-アンインストールは、トレイの Meltype のアイコンを右クリック →「アンインストール...」か、Windows の「設定」→「アプリ」→「インストールされているアプリ」で Meltype の「…」→「アンインストール」を選びます (設定と学習データも消えます)。zip の中の `Uninstall.cmd` をダブルクリックしても同じです。
+このフォークは自動では更新しません (本家のリリースには Meltype IME が入っていないため、本家の版に更新しないようにしています)。新しい版は、このリポジトリの Releases の zip か、ソースから入れ直してください。
+本家のリリース・このリポジトリの Releases の zip で入れた場合のアンインストールは、トレイの Meltype のアイコンを右クリック →「アンインストール...」か、Windows の「設定」→「アプリ」→「インストールされているアプリ」で Meltype の「…」→「アンインストール」を選びます (設定と学習データも消えます)。zip の中の `Uninstall.cmd` をダブルクリックしても同じです。
 
 必要なもの: Windows 10 / 11 (64bit)、Microsoft IME (Windows 標準の日本語入力)。.NET は同梱しているので、別に入れる必要はありません。
 
@@ -61,7 +83,7 @@ F10 (英字) / F6 (ひらがな) で直して確定すると、次からその�
 
 ## プライバシー
 
-Meltype はキーボードの入力を監視して動くツールですが、打った内容をネットワークに送ることはありません。 セキュリティの方針と脆弱性の報告先は [SECURITY.md](SECURITY.md)。通信するのは、自動更新で GitHub に新しい版があるかを確かめるとき (送るのは今の版だけ) と、自分で開いた不具合報告のフォームだけです。
+Meltype はキーボードの入力を監視して動くツールですが、打った内容をネットワークに送ることはありません。 セキュリティの方針と脆弱性の報告先は [SECURITY.md](SECURITY.md)。通信するのは、自動更新で GitHub に新しい版があるかを確かめるとき (送るのは今の版だけ。このフォークは自動更新をしないので確かめません) と、自分で開いた不具合報告のフォームだけです。
 保存するのは `%LOCALAPPDATA%\Meltype` の設定・学習データ・ユーザー辞書と、ファイルログを ON にしたときのログだけです。
 
 ## ライセンス
@@ -69,7 +91,8 @@ Meltype はキーボードの入力を監視して動くツールですが、打
 Meltype は **GNU General Public License v3.0** ([LICENSE](LICENSE)) で公開しています。
 
 - 個人・会社でそのまま使う、GPL v3 の条件 (改造版もソースを公開) で改造・再配布する → 無料で自由に使えます
-- GPL v3 の条件で使えない場合 (製品に組み込んでソースを公開せずに配布したいなど、非公開で利用したい場合) は、メールでご相談ください: ibutya0319@gmail.com
+- GPL v3 の条件で使えない場合 (製品に組み込んでソースを公開せずに配布したいなど、非公開で利用したい場合) は、メールでご相談ください: ibutya0319@gmail.com (本家の作者)
+- このフォークで足した Meltype IME の部分 (`native/tip/`、`src/Meltype/Tip/` など、先頭に `Copyright (C) 2026 lnkiai` とあるファイル) は lnkiai の著作物で、GPL v3 (またはそれ以降) でだけ提供しています
 
 貢献の方法と貢献者ライセンス同意 (CLA) は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。
 

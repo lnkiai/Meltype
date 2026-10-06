@@ -7,7 +7,7 @@
 
 GitHub のアカウントが無い場合は、Meltype のトレイのメニュー「不具合の報告・提案...」から開くフォームで送れます (送った内容は Issue になります。仕組みは [tools/report-form](tools/report-form/README.md))。
 
-[Issue](https://github.com/yksr-melt/Meltype/issues/new/choose) のひな形 (不具合 / 変換・判定の間違い / 辞書 / 提案) から選んで書いてください。
+[Issue](https://github.com/lnkiai/Meltype/issues/new/choose) のひな形 (不具合 / 変換・判定の間違い / 辞書 / 提案) から選んで書いてください。
 Mac 版・Linux 版はプレビュー版です。気づいたことは小さなことでも報告してもらえると助かります。
 どのひな形でも、大事なのは次の 3 つです。
 

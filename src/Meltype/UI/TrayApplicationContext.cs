@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
@@ -130,7 +131,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
         updates.DropDownItems.Add(_updateItem);
         updates.DropDownOpening += (_, _) => _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
-        menu.Items.Add(updates);
+        // 自動更新をしない版 (このフォーク) では出さない
+        if (AppInfo.UpdateRepository.Length > 0) menu.Items.Add(updates);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("終了", null, (_, _) => ExitThread());
         menu.Opening += (_, _) => startup.Checked = Startup.IsEnabled;

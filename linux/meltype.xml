@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Meltype の IBus のコンポーネント。install.sh が @DIR@ をインストール先に置き換えて /usr/share/ibus/component に入れる。 -->
+<!-- Modified by lnkiai (2026): ホームページをフォークにする -->
 <component>
     <name>org.freedesktop.IBus.Meltype</name>
     <description>Meltype: 半角/全角 を押さずに日本語と英語を打ち分ける日本語入力</description>
@@ -7,7 +8,7 @@
     <version>1.0.1</version>
     <author>Yukishiro</author>
     <license>GPL-3.0-or-later</license>
-    <homepage>https://github.com/yksr-melt/Meltype</homepage>
+    <homepage>https://github.com/lnkiai/Meltype</homepage>
     <textdomain>meltype</textdomain>
     <engines>
         <engine>

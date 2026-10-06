@@ -92,6 +92,7 @@ internal static class TipEndToEnd
                 {
                     box.Clear();
                     await Task.Delay(200);
+                    if (results.Count == 0) Console.WriteLine($"TSF: {TsfProbe.Describe()}");
                     TypeKeys(keys);
                     await Task.Delay(1200);
                     results.Add((name, expected, box.Text));

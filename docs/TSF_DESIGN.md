@@ -25,7 +25,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
-| `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
+| `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ)。最初に TSF の状態 (有効な IME・キーボードの配列・入力欄の「IME に渡さない」印) を出す |
 
 `--tip-e2e` の制約: Windows は、人のキーボード操作がしばらく無い状態だと、プログラムが送り込んだキー (SendInput) も、TSF のキー処理を直接呼んだキー (ITfKeystrokeMgr) も、IME に渡さない。
 このときは TSF の状態がすべて正常なのに、IME のキー処理が呼ばれず、英字のまま入る。人が操作している間に流すと通る。
@@ -113,8 +113,8 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - 入れ直すたびに UAC を出さないように、DLL が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256` が同じ) なら登録し直さない。
   登録できてからハッシュを置くので、途中で失敗したら次に入れ直したときに登録し直す。新しい DLL を登録できなければ、前の DLL に戻して登録し直す。
   断られたら覚えておき、Install.cmd・Install-Meltype.ps1 を自分で実行したときだけまた聞く
-- 自動更新で入れる install.ps1 は、もう登録してあるときだけ Meltype IME を登録し直す (頼まれていないのに管理者権限の確認を出さない)。
-  まだ入れていない人には、Install.cmd を自分で実行したとき (-Ask) に聞く
+- このフォークは自動更新をしない (本家の版には Meltype IME が入っておらず、設定の動作モード「Meltype IME」も読めないので、本家の版に更新しない)。
+  新しい版は、このフォークの Releases の zip か、ソースから Install-Meltype.ps1 で入れ直す。install.ps1 は、自分で実行したとき (-Ask) か、もう登録してあるときだけ Meltype IME を登録する
 - 動作モードが Meltype IME なのに登録されていなければ (登録を外した・ほかのユーザーがアンインストールした)、起動したときに Meltype キーボードに戻して保存する
   (入れ直したら、トレイで選び直す)。登録していなければ、トレイでも設定画面でも Meltype IME は選べない
 - 管理者として動かす前に、DLL が配布したときのハッシュ (`MeltypeTip.dll.package.sha256`、無ければ `.sha256`) と合うかを確かめる (壊れた DLL を登録しないため)

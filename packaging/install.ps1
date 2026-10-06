@@ -1,5 +1,6 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
+# Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 # -Ask: Install.cmd から自分で実行したとき。前に Meltype IME の登録を断っていても、もう一度聞く (自動更新では聞かない)
 param([switch]$Ask)
@@ -79,7 +80,7 @@ if (Test-Path -LiteralPath $uninstallSource) {
         DisplayIcon     = $exe
         InstallLocation = $target
         UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$uninstaller`" -FromSettings"
-        URLInfoAbout    = 'https://github.com/yksr-melt/Meltype'
+        URLInfoAbout    = 'https://github.com/lnkiai/Meltype'
     }
     foreach ($name in $values.Keys) { Set-ItemProperty -Path $key -Name $name -Value $values[$name] }
     foreach ($name in 'NoModify', 'NoRepair') { Set-ItemProperty -Path $key -Name $name -Value 1 -Type DWord }

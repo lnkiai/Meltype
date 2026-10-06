@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using System.ComponentModel;
 using System.Text.Json;
@@ -210,7 +211,7 @@ public sealed class Settings
     public bool ShowNotifications { get; set; } = true;
 
     [Category("9. 更新"), DisplayName("自動で更新する"),
-     Description("新しい版が公開されたら自動でダウンロードし、次に Meltype を起動したとき (Windows にサインインしたとき) に更新します。トレイの「更新して再起動」で今すぐ更新もできます。設定・学習データはそのまま残ります。")]
+     Description("新しい版が公開されたら自動でダウンロードし、次に Meltype を起動したとき (Windows にサインインしたとき) に更新します。トレイの「更新して再起動」で今すぐ更新もできます。設定・学習データはそのまま残ります。(Meltype IME を足したフォークは自動更新をしないので、この設定は使いません)")]
     public bool AutoUpdate { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS) / 両方を判定。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。「両方を判定」は IME 自動切替のみ (Meltype キーボードではローマ字入力)。")]

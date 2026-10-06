@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Modified by lnkiai (2026): Meltype IME (TSF) を足すための変更
 
 using Meltype.Config;
 using Meltype.Diagnostics;
@@ -45,7 +46,7 @@ internal static class Program
 
         // 動作モードが Meltype IME なのに、Meltype IME が登録されていない (登録を外した・ほかのユーザーがアンインストールした):
         // どこでも何も起きなくなるので、Meltype キーボードに戻して保存する (Meltype IME を入れ直したら、トレイで選び直す)。
-        // 保存しておくと、あとで前の版 (動作モード「Meltype IME」を読めない) を入れても、設定が初期化されない
+        // 保存しておくと、あとで本家の版 (動作モード「Meltype IME」を読めない) を入れても、設定が初期化されない
         if (settings.Mode == InputMode.Tsf && Tip.TipServer.IsKnownUnregistered)
         {
             settings.Mode = InputMode.Keyboard;
