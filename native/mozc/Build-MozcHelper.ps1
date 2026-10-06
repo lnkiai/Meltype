@@ -81,4 +81,18 @@ Copy-Item -LiteralPath (Join-Path $src 'bazel-bin\converter\meltype_mozc_helper.
 # Mozc と辞書 (IPAdic など)・ライブラリのライセンス
 Copy-Item -LiteralPath (Join-Path $src 'data\installer\credits_en.html') -Destination (Join-Path $bin 'MOZC-CREDITS.html') -Force
 Copy-Item -LiteralPath (Join-Path $MozcSource 'LICENSE') -Destination (Join-Path $bin 'MOZC-LICENSE.txt') -Force
+# ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) を、ビルドに使った Visual Studio から横に置く。
+# 「Visual C++ 再頒布可能パッケージ」が入っていない PC でも動くように (Microsoft が、アプリと一緒に配ることを認めているファイル)。
+# ビルドに使ったのと同じ版にする (古い版のランタイムでは、新しい版でビルドしたヘルパーが落ちることがある)
+$crt = Get-ChildItem (Join-Path $VcPath 'Redist\MSVC\*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
+    Sort-Object { $v = $null; if ([version]::TryParse((Split-Path (Split-Path (Split-Path $_.FullName)) -Leaf), [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
+    Select-Object -First 1
+$runtimeDlls = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
+if ($crt -and -not ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $crt.FullName $_)) })) {
+    foreach ($dll in $runtimeDlls) { Copy-Item -LiteralPath (Join-Path $crt.FullName $dll) -Destination $bin -Force }
+    Write-Host "Visual C++ のランタイムを置きました ($($crt.FullName))。"
+}
+else {
+    Write-Warning 'Visual C++ のランタイム (VC\Redist\MSVC) が見つかりません。Visual C++ 再頒布可能パッケージが入っていない PC では、ヘルパーが動きません。'
+}
 Write-Host "作成しました: $bin"
