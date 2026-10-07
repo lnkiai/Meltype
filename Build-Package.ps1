@@ -34,9 +34,12 @@ if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
     # 前の版の Build-MozcHelper.ps1 で作った bin には無い。版がずれないよう、ほかから補わずに止める
     # (無いまま配ると、「Visual C++ 再頒布可能パッケージ」が入っていない PC でヘルパーが起動できない)
-    $missing = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $mozcBin $_)) }
-    if ($missing) {
-        throw "Mozc の変換ヘルパーと一緒に置く Visual C++ のランタイムがありません ($($missing -join ', '))。native\mozc\Build-MozcHelper.ps1 でヘルパーを作り直してください。"
+    # どれを置いたかは、Build-MozcHelper.ps1 が VC-RUNTIME.txt に書いている (ヘルパーを dumpbin で調べて決めたもの)
+    $runtimeList = Join-Path $mozcBin 'VC-RUNTIME.txt'
+    $runtimeDlls = if (Test-Path -LiteralPath $runtimeList) { @(Get-Content -LiteralPath $runtimeList | Where-Object { $_.Trim() }) } else { @() }
+    $missing = $runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $mozcBin $_)) }
+    if ($runtimeDlls.Count -eq 0 -or $missing) {
+        throw "Mozc の変換ヘルパーと一緒に置く Visual C++ のランタイムがありません ($(if ($missing) { $missing -join ', ' } else { 'VC-RUNTIME.txt' }))。native\mozc\Build-MozcHelper.ps1 でヘルパーを作り直してください。"
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $app 'mozc') | Out-Null
     Copy-Item -Path (Join-Path $mozcBin '*') -Destination (Join-Path $app 'mozc') -Force

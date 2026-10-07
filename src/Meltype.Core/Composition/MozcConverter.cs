@@ -40,6 +40,9 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     [DllImport("kernel32.dll")]
     private static extern uint SetErrorMode(uint mode);
 
+    [DllImport("kernel32.dll")]
+    private static extern uint GetErrorMode();
+
     // STATUS_DLL_NOT_FOUND / STATUS_ENTRYPOINT_NOT_FOUND / STATUS_INVALID_IMAGE_FORMAT (起動のときに DLL を読み込めなかった)
     private static bool IsLoaderFailure(int exitCode) => exitCode is unchecked((int)0xC0000135) or unchecked((int)0xC0000139) or unchecked((int)0xC000007B);
 
@@ -211,11 +214,11 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             info.ArgumentList.Add(_profileDirectory);
         }
         Process process;
-        // 今の設定に足す (SetErrorMode は前の設定を返して置き換えるので、いったん読んでから足す)
+        // 今の設定に足す (GetErrorMode で読む。SetErrorMode(0) で読むと、一瞬プロセス全体の設定が 0 になる)
         var previousMode = 0u;
         if (OperatingSystem.IsWindows())
         {
-            previousMode = SetErrorMode(0);
+            previousMode = GetErrorMode();
             SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
         }
         try
