@@ -31,29 +31,16 @@ if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LAS
 # Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ Microsoft IME だけで動く。
 $mozcBin = Join-Path $root 'native\mozc\bin'
 if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
+    # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
+    # 前の版の Build-MozcHelper.ps1 で作った bin には無い。版がずれないよう、ほかから補わずに止める
+    # (無いまま配ると、「Visual C++ 再頒布可能パッケージ」が入っていない PC でヘルパーが起動できない)
+    $missing = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $mozcBin $_)) }
+    if ($missing) {
+        throw "Mozc の変換ヘルパーと一緒に置く Visual C++ のランタイムがありません ($($missing -join ', '))。native\mozc\Build-MozcHelper.ps1 でヘルパーを作り直してください。"
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $app 'mozc') | Out-Null
     Copy-Item -Path (Join-Path $mozcBin '*') -Destination (Join-Path $app 'mozc') -Force
     Write-Host 'Mozc の変換ヘルパーを同梱しました。'
-    # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、ふつうは Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
-    # 前の版の Build-MozcHelper.ps1 で作った bin で無いときは、この PC の Visual Studio から置く
-    # (「Visual C++ 再頒布可能パッケージ」が入っていない PC では、ヘルパーが起動できずにエラーの画面が出るため。Microsoft が、アプリと一緒に配ることを認めているファイル)
-    $runtimeDlls = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
-    if ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $app "mozc\$_")) }) {
-        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-        $vs = if (Test-Path -LiteralPath $vswhere) { & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath } else { $null }
-        $crt = if ($vs) {
-            Get-ChildItem (Join-Path $vs 'VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
-                Sort-Object { $v = $null; if ([version]::TryParse((Split-Path (Split-Path (Split-Path $_.FullName)) -Leaf), [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
-                Select-Object -First 1
-        }
-        if ($crt -and -not ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $crt.FullName $_)) })) {
-            foreach ($dll in $runtimeDlls) { Copy-Item -LiteralPath (Join-Path $crt.FullName $dll) -Destination (Join-Path $app 'mozc') -Force }
-            Write-Warning "Visual C++ のランタイムを、この PC の Visual Studio から同梱しました ($($crt.FullName))。ヘルパーをビルドした版と違うかもしれないので、Build-MozcHelper.ps1 で作り直すのがおすすめです。"
-        }
-        else {
-            Write-Warning 'Visual C++ のランタイム (VC\Redist\MSVC) が見つかりません。Visual C++ 再頒布可能パッケージが入っていない PC では、Mozc の変換ヘルパーが動きません (Microsoft IME だけで変換します)。'
-        }
-    }
 }
 else {
     Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。Microsoft IME だけで変換します。'

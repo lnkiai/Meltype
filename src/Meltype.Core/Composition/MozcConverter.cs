@@ -32,7 +32,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
     private bool _missingDependency;
 
-    // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)
+    // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)。
+    // 子プロセスが引き継ぐのはプロセス全体の設定だけなので、SetThreadErrorMode では効かない。起動したらすぐ戻す
     private const uint SEM_FAILCRITICALERRORS = 0x0001;
     private const uint SEM_NOOPENFILEERRORBOX = 0x8000;
 

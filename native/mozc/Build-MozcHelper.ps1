@@ -35,6 +35,25 @@ $bin = Join-Path $here 'bin'
 # ビルドする Mozc の版 (動作を確かめた commit に固定する)
 $commit = (Get-Content -Raw -LiteralPath (Join-Path $here 'MOZC_COMMIT')).Trim()
 
+if (-not $VcPath) {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if (-not $vs) { throw 'Visual Studio (C++) が見つかりません。' }
+    $VcPath = Join-Path $vs 'VC'
+}
+
+# ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、ビルドに使った Visual Studio から横に置く。
+# 「Visual C++ 再頒布可能パッケージ」が入っていない PC でも動くように (Microsoft が、アプリと一緒に配ることを認めているファイル)。
+# ビルドに使ったのと同じ版にする (古い版のランタイムでは、新しい版でビルドしたヘルパーが落ちることがある)。
+# 無ければ配れないので、時間のかかるビルドの前に確かめて止める
+$crt = Get-ChildItem (Join-Path $VcPath 'Redist\MSVC\*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
+    Sort-Object { $v = $null; if ([version]::TryParse((Split-Path (Split-Path (Split-Path $_.FullName)) -Leaf), [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
+    Select-Object -First 1
+$runtimeDlls = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
+if (-not $crt -or ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $crt.FullName $_)) })) {
+    throw "Visual C++ のランタイム (Redist\MSVC) が見つかりません ($VcPath)。Visual Studio Installer で「C++ によるデスクトップ開発」を入れ直してください。"
+}
+
 # src の有無ではなく .git で見る (GitHub Actions のキャッシュが src\third_party_cache だけを先に戻すため)。
 if (-not (Test-Path (Join-Path $MozcSource '.git'))) {
     New-Item -ItemType Directory -Force -Path $MozcSource | Out-Null
@@ -51,13 +70,6 @@ Copy-Item -LiteralPath (Join-Path $here 'meltype_mozc_helper.cc') -Destination (
 $build = Join-Path $src 'converter\BUILD.bazel'
 if (-not (Select-String -LiteralPath $build -Pattern 'name = "meltype_mozc_helper"' -Quiet)) {
     Add-Content -LiteralPath $build -Value ("`n" + (Get-Content -Raw -LiteralPath (Join-Path $here 'BUILD.fragment'))) -Encoding utf8
-}
-
-if (-not $VcPath) {
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if (-not $vs) { throw 'Visual Studio (C++) が見つかりません。' }
-    $VcPath = Join-Path $vs 'VC'
 }
 
 Push-Location $src
@@ -81,18 +93,6 @@ Copy-Item -LiteralPath (Join-Path $src 'bazel-bin\converter\meltype_mozc_helper.
 # Mozc と辞書 (IPAdic など)・ライブラリのライセンス
 Copy-Item -LiteralPath (Join-Path $src 'data\installer\credits_en.html') -Destination (Join-Path $bin 'MOZC-CREDITS.html') -Force
 Copy-Item -LiteralPath (Join-Path $MozcSource 'LICENSE') -Destination (Join-Path $bin 'MOZC-LICENSE.txt') -Force
-# ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) を、ビルドに使った Visual Studio から横に置く。
-# 「Visual C++ 再頒布可能パッケージ」が入っていない PC でも動くように (Microsoft が、アプリと一緒に配ることを認めているファイル)。
-# ビルドに使ったのと同じ版にする (古い版のランタイムでは、新しい版でビルドしたヘルパーが落ちることがある)
-$crt = Get-ChildItem (Join-Path $VcPath 'Redist\MSVC\*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
-    Sort-Object { $v = $null; if ([version]::TryParse((Split-Path (Split-Path (Split-Path $_.FullName)) -Leaf), [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
-    Select-Object -First 1
-$runtimeDlls = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
-if ($crt -and -not ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $crt.FullName $_)) })) {
-    foreach ($dll in $runtimeDlls) { Copy-Item -LiteralPath (Join-Path $crt.FullName $dll) -Destination $bin -Force }
-    Write-Host "Visual C++ のランタイムを置きました ($($crt.FullName))。"
-}
-else {
-    Write-Warning 'Visual C++ のランタイム (VC\Redist\MSVC) が見つかりません。Visual C++ 再頒布可能パッケージが入っていない PC では、ヘルパーが動きません。'
-}
+foreach ($dll in $runtimeDlls) { Copy-Item -LiteralPath (Join-Path $crt.FullName $dll) -Destination $bin -Force }
+Write-Host "Visual C++ のランタイムを置きました ($($crt.FullName))。"
 Write-Host "作成しました: $bin"
