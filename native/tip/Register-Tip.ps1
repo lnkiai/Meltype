@@ -14,12 +14,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-# 32 ビットの PowerShell で動いていても、64 ビットの Program Files と regsvr32 を使う
-$programFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+# 32 ビットの PowerShell で動いていても、64 ビットの Program Files と regsvr32 を使う。
+# 環境変数 (ProgramW6432・SystemRoot など) はユーザーが上書きでき、管理者として動くこのスクリプトにも引き継がれるので使わない
+$programFiles = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64).OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion').GetValue('ProgramFilesDir')
+$windows = [Environment]::GetFolderPath('Windows')
 $target = Join-Path $programFiles 'Meltype\tip'
-$regsvr64 = Join-Path $env:SystemRoot 'System32\regsvr32.exe'
-if (-not [Environment]::Is64BitProcess -and [Environment]::Is64BitOperatingSystem) { $regsvr64 = Join-Path $env:SystemRoot 'Sysnative\regsvr32.exe' }
-$regsvr32 = Join-Path $env:SystemRoot 'SysWOW64\regsvr32.exe'
+$regsvr64 = Join-Path $windows 'System32\regsvr32.exe'
+if (-not [Environment]::Is64BitProcess -and [Environment]::Is64BitOperatingSystem) { $regsvr64 = Join-Path $windows 'Sysnative\regsvr32.exe' }
+$regsvr32 = Join-Path $windows 'SysWOW64\regsvr32.exe'
 
 function Write-Log([string]$message) {
     Write-Host $message

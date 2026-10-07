@@ -413,29 +413,58 @@ void TextService::AdviseTextEditSink(ITfDocumentMgr* documentMgr) {
 bool TextService::IsSecretField(TfEditCookie ec, ITfContext* context) {
     // 入力欄の種類 (InputScope) がパスワード・暗証番号か。
     // (入力欄が開いたときに非同期の編集セッションで読むと、それが終わるまでキーが届かなくなるアプリがあるので、キーの編集セッションの中で読む)
-    Microsoft::WRL::ComPtr<ITfProperty> property;
-    if (FAILED(context->GetProperty(kPropInputScope, &property))) return false;
+    // 種類は 2 か所にある: Windows が持つもの (SetInputScope などで決めたもの) と、アプリが自分で知らせるもの (自前で TSF に対応したアプリ。
+    // ブラウザーなど)。どちらかがパスワードと言えばパスワード欄とする。どちらにも無ければ、種類を決めていない入力欄
+    // (ふつうのアプリの多く。ブラウザーはパスワード欄では IME を無効にもするので、それは ContextDisabled で見る)。
+    // 種類の値はあるのに中身を読めないときは、パスワード欄かもしれないので、パスワード欄として扱う (打った文字を Meltype.exe に送らない)。
+    // 問い合わせ自体ができないとき (対応していないアプリ・選択が無い) は、種類を決めていない入力欄と同じにする
+    // (止めると、そのアプリでは Meltype IME がまったく使えなくなるため)
+    auto unreadable = [](const wchar_t* step) {
+        TipLog(L"入力欄の種類を読めないので、パスワード欄として扱います (%s)", step);
+        return true;
+    };
+    Microsoft::WRL::ComPtr<ITfProperty> windowsProperty;
+    Microsoft::WRL::ComPtr<ITfReadOnlyProperty> appProperty;
+    if (FAILED(context->GetProperty(kPropInputScope, &windowsProperty))) windowsProperty.Reset();
+    if (FAILED(context->GetAppProperty(kPropInputScope, &appProperty))) appProperty.Reset();
+    // 調べるとき用: どこから読めるか (変わったときだけ書く)
+    const wchar_t* source = windowsProperty && appProperty ? L"Windows とアプリ" : windowsProperty ? L"Windows" : appProperty ? L"アプリ" : L"無い";
+    if (scopeSource_ != source) TipLog(L"入力欄の種類を読むところ: %s", source);
+    scopeSource_ = source;
+    if (!windowsProperty && !appProperty) return false;
     TF_SELECTION selection = {};
     ULONG fetched = 0;
     if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return false;
+    const wchar_t* failed = nullptr;
     bool secret = false;
-    VARIANT value;
-    VariantInit(&value);
-    if (SUCCEEDED(property->GetValue(ec, selection.range, &value)) && value.vt == VT_UNKNOWN && value.punkVal != nullptr) {
-        Microsoft::WRL::ComPtr<ITfInputScope> scope;
-        if (SUCCEEDED(value.punkVal->QueryInterface(IID_ITfInputScope, reinterpret_cast<void**>(scope.GetAddressOf())))) {
+    for (ITfReadOnlyProperty* property : {static_cast<ITfReadOnlyProperty*>(windowsProperty.Get()), appProperty.Get()}) {
+        if (property == nullptr) continue;
+        VARIANT value;
+        VariantInit(&value);
+        if (FAILED(property->GetValue(ec, selection.range, &value))) {
+            // 問い合わせられない: 種類を決めていないのと同じ
+        } else if (value.vt == VT_UNKNOWN && value.punkVal != nullptr) {
+            Microsoft::WRL::ComPtr<ITfInputScope> scope;
             InputScope* scopes = nullptr;
             UINT count = 0;
-            if (SUCCEEDED(scope->GetInputScopes(&scopes, &count)) && scopes != nullptr) {
+            if (FAILED(value.punkVal->QueryInterface(IID_ITfInputScope, reinterpret_cast<void**>(scope.GetAddressOf())))) {
+                failed = L"ITfInputScope";
+            } else if (FAILED(scope->GetInputScopes(&scopes, &count)) || (scopes == nullptr && count != 0)) {
+                failed = L"GetInputScopes";
+            } else {
                 for (UINT i = 0; i < count; i++) {
                     if (IsSecretScope(scopes[i])) secret = true;
                 }
-                CoTaskMemFree(scopes);
             }
+            if (scopes != nullptr) CoTaskMemFree(scopes);
+        } else if (value.vt != VT_EMPTY && value.vt != VT_NULL && value.vt != VT_UNKNOWN) {
+            // 種類を決めていない入力欄は VT_EMPTY・VT_NULL か空の VT_UNKNOWN。それ以外の形は知らないので読めなかったとする
+            failed = L"VARIANT";
         }
+        VariantClear(&value);
     }
-    VariantClear(&value);
     selection.range->Release();
+    if (failed != nullptr) return unreadable(failed);
     return secret;
 }
 
@@ -590,6 +619,7 @@ void TextService::ForgetSecretField() {
 bool TextService::WouldEat(ITfContext* context, UINT vk, wchar_t& ch, bool test) {
     ch = 0;
     secretChecked_ = false;
+    secretWhileComposing_ = false;
     if (disabled_ || vk >= 256) return false;
     if (IsModifier(vk)) return false;
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
@@ -622,6 +652,18 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, wchar_t& ch, bool test)
         }
     }
     if (composition_ != nullptr) {
+        // 変換中にアプリが入力欄の IME を無効にした (ブラウザーはパスワード欄に変えるとそうする): 変換中の文字を確定して、
+        // このキーからは受け取らない。ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す
+        // (キーが先に届いて、確定が後になるのを防ぐ)。
+        // 入力欄の種類がパスワードに変わったかは、キーの編集セッションの中で確かめる (HandleKey。secretChecked_ は false のまま)
+        if (ContextDisabled(context)) {
+            if (CommitNow(true)) {
+                TipLog(L"変換中に入力欄がパスワード欄になったので、確定してキーを通します");
+                return false;
+            }
+            secretWhileComposing_ = true;
+            return true;
+        }
         // Ctrl・Alt・Windows キーとの組み合わせ (Ctrl + S など): Meltype.exe も確定してアプリに渡すだけなので、ここで確定して
         // 受け取らずに通す (受け取ってから送り直すと、送り直しが届かないアプリでキーが消える)。
         // ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す (キーが先に届いて、確定が後になるのを防ぐ)
@@ -750,7 +792,9 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch) {
     bool insertedOnFailure = false;
     HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
         // キーを受け取る前に入力欄の種類を読めなかった: ここで確かめ、パスワード欄なら Meltype.exe に送らずにアプリへ返す
-        if (composition_ == nullptr && !secretChecked_ && IsSecretField(ec, context)) {
+        // (変換中なら、変換中の文字を確定してから。変換中にパスワード欄になったのに、受け取る前に確定できなかったときも)
+        if (secretWhileComposing_ || (!secretChecked_ && IsSecretField(ec, context))) {
+            if (composition_ != nullptr) CommitInSession(ec, context, true);
             consumed_ = false;
             TipLog(L"パスワードの入力欄なので何もしません");
             return S_OK;

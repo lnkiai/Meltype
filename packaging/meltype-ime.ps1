@@ -11,8 +11,9 @@
 $MeltypeImeTip = '0411:{417D801B-A9BD-4C26-BD16-356A825A6998}{21F643F4-72D5-4946-BF70-0A126AB52D05}'
 
 # 64 ビットの Program Files (32 ビットの PowerShell から動かしても、64 ビットの方を使う)。
-# 管理者として動かす Register-Tip.ps1 は、32 ビットの PowerShell で動いても 64 ビットの場所と regsvr32 を使う
-$MeltypeProgramFiles = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+# 管理者として動かす Register-Tip.ps1 は、32 ビットの PowerShell で動いても 64 ビットの場所と regsvr32 を使う。
+# 環境変数 (ProgramW6432 など) はユーザーが上書きできるので、Windows の設定 (HKLM) から読む
+$MeltypeProgramFiles = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64).OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion').GetValue('ProgramFilesDir')
 
 # ARM64 の Windows か (x64 のエミュレーションで動いている PowerShell では、環境変数が AMD64 になるので、Windows の設定から読む)
 function Test-Arm64Windows {
@@ -25,12 +26,55 @@ function Test-MeltypeImeRegistered {
     return Test-Path -LiteralPath 'HKLM:\SOFTWARE\Microsoft\CTF\TIP\{417D801B-A9BD-4C26-BD16-356A825A6998}'
 }
 
-# 管理者として実行する。'ok' / 'failed' / 'cancelled' (UAC で「いいえ」) を返す
-function Invoke-Elevated([string]$script, [string[]]$arguments) {
-    $log = Join-Path $env:TEMP "meltype-ime-$([Guid]::NewGuid().ToString('N')).log"
-    $all = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"") + $arguments + @('-Log', "`"$log`"")
+# 管理者として動かす処理。確かめてから使うまでの間にファイルをすり替えられないように、ユーザーが書き換えられない
+# Program Files の下に写してから、昇格する前に確かめたハッシュと比べ、合ったものだけで Register-Tip.ps1 を動かす。
+# この処理はファイルではなくコマンドとして渡す (ユーザーのフォルダーにあるスクリプトを、管理者として直接動かさない)
+$MeltypeImeElevatedCommand = {
+    param([string]$Source, [string]$Files, [string]$Log, [string]$Mode)
+    $ErrorActionPreference = 'Stop'
+    $code = 1
+    # 環境変数はユーザーが上書きできる (管理者として動くプロセスにも引き継がれる) ので、Windows の設定 (HKLM) から読む
+    $programFiles = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64).OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion').GetValue('ProgramFilesDir')
+    $stage = Join-Path $programFiles "Meltype\stage-$([Guid]::NewGuid().ToString('N'))"
     try {
-        $process = Start-Process -FilePath powershell.exe -ArgumentList $all -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+        # Files: 'Source からの相対パス=SHA-256' を | でつないだもの
+        foreach ($entry in $Files.Split('|')) {
+            $relative, $expected = $entry.Split('=')
+            $copy = Join-Path $stage $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path $copy) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $Source $relative) -Destination $copy -Force
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            try { $actual = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($copy))).Replace('-', '') }
+            finally { $sha.Dispose() }
+            if ($actual -ne $expected) { throw "$relative が、確かめたときのものと違います (書き換えられた可能性があります)。登録しません。" }
+        }
+        $arguments = @{ Log = $Log }
+        if ($Mode -eq 'Unregister') { $arguments.Unregister = $true }
+        else { $arguments.Source = $stage }
+        & (Join-Path $stage 'Register-Tip.ps1') @arguments
+        $code = $LASTEXITCODE
+    }
+    catch {
+        # 別の管理者のアカウントで動いていると、ログの場所 (元のユーザーの TEMP) に書けないことがある
+        try { Add-Content -LiteralPath $Log -Value "失敗: $($_.Exception.Message)" -Encoding UTF8 } catch { }
+    }
+    finally { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+    exit $code
+}
+
+# 管理者として Register-Tip.ps1 を動かす。$Hashes: Source からの相対パス → SHA-256 (Register-Tip.ps1 を含める)。
+# 'ok' / 'failed' / 'cancelled' (UAC で「いいえ」) を返す
+function Invoke-Elevated([string]$Source, [hashtable]$Hashes, [string]$Mode) {
+    $log = Join-Path $env:TEMP "meltype-ime-$([Guid]::NewGuid().ToString('N')).log"
+    $quote = { param([string]$text) "'" + $text.Replace("'", "''") + "'" }
+    $files = ($Hashes.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join '|'
+    $command = "& { $MeltypeImeElevatedCommand } $(& $quote $Source) $(& $quote $files) $(& $quote $log) $(& $quote $Mode)"
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $all = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
+    # PATH から探さず、Windows のフォルダーの powershell.exe を使う
+    $powershell = Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    try {
+        $process = Start-Process -FilePath $powershell -ArgumentList $all -Verb RunAs -WindowStyle Hidden -Wait -PassThru
     }
     catch {
         # UAC で「いいえ」を選んだ
@@ -121,17 +165,24 @@ function Read-HashFile([string]$path) {
 
 # 管理者として動かす前に、これから入れる DLL が、ビルドしたときのハッシュと合っているかを確かめる。
 # 壊れた・途中までしかコピーされていない DLL を登録しないためのもの。ハッシュのファイルも同じフォルダー (ユーザーが書き換えられる場所)
-# にあるので、同じユーザーの権限で動くプログラムによる書き換えは防げない (SECURITY.md)
-function Test-MeltypeImeSource([string]$Source) {
+# にあるので、同じユーザーの権限で動くプログラムによる書き換えは防げない (SECURITY.md)。
+# 確かめたファイル (Register-Tip.ps1 も) のハッシュを返す。管理者として動く側は、写したものがこれと合うかを確かめる。合わなければ $null
+function Get-MeltypeImeSourceHashes([string]$Source) {
+    $hashes = @{}
     foreach ($arch in 'x64', 'x86') {
         $dll = Join-Path $Source "$arch\MeltypeTip.dll"
         # 配布用のパッケージなら署名した後のハッシュ、ソースから入れたとき (署名しない) は署名する前のハッシュ
         $expected = Read-HashFile "$dll.package.sha256"
         if (-not $expected) { $expected = Read-HashFile "$dll.sha256" }
-        if (-not (Test-Path -LiteralPath $dll)) { return $false }
-        if ($expected -and (Get-Sha256 $dll) -ne $expected) { return $false }
+        if (-not (Test-Path -LiteralPath $dll)) { return $null }
+        $actual = Get-Sha256 $dll
+        if ($expected -and $actual -ne $expected) { return $null }
+        $hashes["$arch\MeltypeTip.dll"] = $actual
+        # 署名する前の中身のハッシュ (Program Files に置き、次の更新で同じ DLL なら登録し直さないのに使う) も、すり替えられないように一緒に確かめる
+        if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$arch\MeltypeTip.dll.sha256"] = Get-Sha256 "$dll.sha256" }
     }
-    return $true
+    $hashes['Register-Tip.ps1'] = Get-Sha256 (Join-Path $Source 'Register-Tip.ps1')
+    return $hashes
 }
 
 # -Ask: 前に断られていても聞く (Install.cmd を自分で実行したとき)。自動更新では聞かない
@@ -143,7 +194,8 @@ function Install-MeltypeIme([string]$Source, [switch]$Ask) {
         Write-Host 'ARM64 の Windows には Meltype IME はまだ対応していません。変換ボックスで入力する方式で使えます。'
         return $false
     }
-    if (-not (Test-MeltypeImeSource $Source)) {
+    $hashes = Get-MeltypeImeSourceHashes $Source
+    if (-not $hashes) {
         Write-Host 'Meltype IME の DLL が、ビルドしたときのものと違います (壊れているか、書き換えられています)。登録しません。'
         return $false
     }
@@ -157,7 +209,7 @@ function Install-MeltypeIme([string]$Source, [switch]$Ask) {
         return $false
     }
     Write-Host 'Meltype IME (入力欄に直接入力) を Windows に登録します。管理者権限の確認が出たら「はい」を選んでください。'
-    $result = Invoke-Elevated $register @('-Source', "`"$Source`"")
+    $result = Invoke-Elevated $Source $hashes 'Register'
     if ($result -ne 'ok') {
         Write-Host 'Meltype IME を登録できませんでした。今までどおり、変換ボックスで入力する方式で使えます。'
         # UAC で断られたときだけ覚えて、自動更新では聞かない (失敗したときは、次の更新でまた試す)
@@ -190,5 +242,5 @@ function Uninstall-MeltypeIme {
     if (-not (Test-Path -LiteralPath $register)) { $register = Join-Path $PSScriptRoot '..\native\tip\Register-Tip.ps1' }
     if (-not (Test-Path -LiteralPath $register)) { return $false }
     Write-Host 'Meltype IME の登録を外します。管理者権限の確認が出たら「はい」を選んでください。'
-    return (Invoke-Elevated $register @('-Unregister')) -eq 'ok'
+    return (Invoke-Elevated (Split-Path $register) @{ 'Register-Tip.ps1' = (Get-Sha256 $register) } 'Unregister') -eq 'ok'
 }
