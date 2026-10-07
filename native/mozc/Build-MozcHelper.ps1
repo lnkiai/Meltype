@@ -44,10 +44,12 @@ if (-not $VcPath) {
 
 # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、ビルドに使った Visual Studio から横に置く。
 # 「Visual C++ 再頒布可能パッケージ」が入っていない PC でも動くように (Microsoft が、アプリと一緒に配ることを認めているファイル)。
-# ビルドに使ったのと同じ版にする (古い版のランタイムでは、新しい版でビルドしたヘルパーが落ちることがある)。
+# ビルドに使った Visual Studio に入っている、いちばん新しいランタイムにする (古い版のランタイムでは、新しい版でビルドしたヘルパーが落ちることがある。
+# ランタイムとビルドのツールは版の番号が一致しないので、番号では合わせない)。
 # 無ければ配れないので、時間のかかるビルドの前に確かめて止める
+# Redist\MSVC\<版>\x64\Microsoft.VC*.CRT なので、2 つ上のフォルダーの名前が版
 $crt = Get-ChildItem (Join-Path $VcPath 'Redist\MSVC\*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue |
-    Sort-Object { $v = $null; if ([version]::TryParse((Split-Path (Split-Path (Split-Path $_.FullName)) -Leaf), [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
+    Sort-Object { $v = $null; if ([version]::TryParse($_.Parent.Parent.Name, [ref]$v)) { $v } else { [version]'0.0' } } -Descending |
     Select-Object -First 1
 $runtimeDlls = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
 if (-not $crt -or ($runtimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $crt.FullName $_)) })) {
